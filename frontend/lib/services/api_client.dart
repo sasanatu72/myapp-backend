@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 
 class ApiClient {
@@ -8,7 +9,8 @@ class ApiClient {
 
   final String baseUrl;
 
-  static const Duration _requestTimeout = Duration(seconds: 15);
+  static const Duration _defaultTimeout = Duration(seconds: 30);
+  static const Duration _authTimeout = Duration(seconds: 75);
 
   String? _token;
   Future<void> Function()? _onUnauthorized;
@@ -39,10 +41,20 @@ class ApiClient {
     return Uri.parse('$baseUrl$path');
   }
 
-  Future<http.Response> _handleResponse(Future<http.Response> request) async {
+  Duration _timeoutFor(String path) {
+    if (path.startsWith('/auth')) {
+      return _authTimeout;
+    }
+    return _defaultTimeout;
+  }
+
+  Future<http.Response> _handleResponse(
+    Future<http.Response> request, {
+    required String path,
+  }) async {
     try {
       final response = await request.timeout(
-        _requestTimeout,
+        _timeoutFor(path),
         onTimeout: () {
           throw Exception('サーバーへの接続がタイムアウトしました。バックエンドが起動しているか確認してください。');
         },
@@ -64,6 +76,7 @@ class ApiClient {
         _uri(path),
         headers: _headers(),
       ),
+      path: path,
     );
   }
 
@@ -74,6 +87,7 @@ class ApiClient {
         headers: _headers(),
         body: jsonEncode(body),
       ),
+      path: path,
     );
   }
 
@@ -84,6 +98,7 @@ class ApiClient {
         headers: _headers(),
         body: jsonEncode(body),
       ),
+      path: path,
     );
   }
 
@@ -93,6 +108,7 @@ class ApiClient {
         _uri(path),
         headers: _headers(),
       ),
+      path: path,
     );
   }
 
@@ -100,7 +116,9 @@ class ApiClient {
     String path,
     Map<String, String> body,
   ) {
-    final headers = <String, String>{};
+    final headers = <String, String>{
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
 
     if (_token != null && _token!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_token';
@@ -112,6 +130,7 @@ class ApiClient {
         headers: headers,
         body: body,
       ),
+      path: path,
     );
   }
 }

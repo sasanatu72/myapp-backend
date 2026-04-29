@@ -43,12 +43,16 @@ class TodoService {
     String? title,
     bool? isDone,
     DateTime? dueDate,
+    bool clearDueDate = false,
   }) async {
     final body = <String, dynamic>{};
 
     if (title != null) body['title'] = title;
     if (isDone != null) body['is_done'] = isDone;
-    if (dueDate != null) {
+
+    if (clearDueDate) {
+      body['due_date'] = null;
+    } else if (dueDate != null) {
       body['due_date'] = dueDate.toIso8601String().split('T').first;
     }
 

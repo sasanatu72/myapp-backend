@@ -5,7 +5,6 @@ import '../controllers/preference_controller.dart';
 import '../models/user_preference.dart';
 import 'calendar_page.dart';
 import 'note_page.dart';
-import 'settings_page.dart';
 import 'todo_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -18,11 +17,10 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
-  static const List<String> _defaultTabs = [
+  static const List<String> _supportedTabs = [
     'calendar',
     'todo',
     'note',
-    'settings',
   ];
 
   @override
@@ -35,19 +33,8 @@ class _HomePageState extends State<HomePage> {
       final pref = controller.preference;
       if (pref == null) return;
 
-      final mergedEnabledTabs = <String>[
-        ...pref.enabledTabs.where((e) => e != 'settings'),
-        'settings',
-      ];
-
-      final mergedTabOrder = <String>[
-        ...pref.tabOrder.where((e) => e != 'settings'),
-        'settings',
-      ];
-
-      final currentTabs =
-          mergedTabOrder.where(mergedEnabledTabs.contains).toList();
-      final initialIndex = currentTabs.indexOf(pref.initialTab);
+      final tabs = _resolvedTabs(pref);
+      final initialIndex = tabs.indexOf(pref.initialTab);
 
       if (mounted) {
         setState(() {
@@ -58,19 +45,25 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<String> _resolvedTabs(UserPreference? pref) {
-    if (pref == null) return _defaultTabs;
+    if (pref == null) return _supportedTabs;
 
-    final enabledTabs = <String>[
-      ...pref.enabledTabs.where((e) => e != 'settings'),
-      'settings',
-    ];
+    final enabledTabs = pref.enabledTabs.where(_supportedTabs.contains).toSet();
 
-    final tabOrder = <String>[
-      ...pref.tabOrder.where((e) => e != 'settings'),
-      'settings',
-    ];
+    if (enabledTabs.isEmpty) {
+      return _supportedTabs;
+    }
 
-    return tabOrder.where(enabledTabs.contains).toList();
+    final orderedTabs = pref.tabOrder
+        .where((tab) => _supportedTabs.contains(tab) && enabledTabs.contains(tab))
+        .toList();
+
+    for (final tab in _supportedTabs) {
+      if (enabledTabs.contains(tab) && !orderedTabs.contains(tab)) {
+        orderedTabs.add(tab);
+      }
+    }
+
+    return orderedTabs.isEmpty ? _supportedTabs : orderedTabs;
   }
 
   Widget _buildPage(String tabKey) {
@@ -81,38 +74,34 @@ class _HomePageState extends State<HomePage> {
         return const TodoPage();
       case 'note':
         return const NotePage();
-      case 'settings':
-        return const SettingsPage();
       default:
-        return const Center(child: Text('未対応のタブです'));
+        return const CalendarPage();
     }
   }
 
-  BottomNavigationBarItem _buildNavItem(String tabKey) {
+  NavigationDestination _buildDestination(String tabKey) {
     switch (tabKey) {
       case 'calendar':
-        return const BottomNavigationBarItem(
-          icon: Icon(Icons.calendar_month),
+        return const NavigationDestination(
+          icon: Icon(Icons.calendar_month_outlined),
+          selectedIcon: Icon(Icons.calendar_month),
           label: 'カレンダー',
         );
       case 'todo':
-        return const BottomNavigationBarItem(
-          icon: Icon(Icons.check_box),
+        return const NavigationDestination(
+          icon: Icon(Icons.check_box_outlined),
+          selectedIcon: Icon(Icons.check_box),
           label: 'タスク',
         );
       case 'note':
-        return const BottomNavigationBarItem(
-          icon: Icon(Icons.note),
+        return const NavigationDestination(
+          icon: Icon(Icons.note_outlined),
+          selectedIcon: Icon(Icons.note),
           label: 'ノート',
         );
-      case 'settings':
-        return const BottomNavigationBarItem(
-          icon: Icon(Icons.settings),
-          label: '設定',
-        );
       default:
-        return const BottomNavigationBarItem(
-          icon: Icon(Icons.help),
+        return const NavigationDestination(
+          icon: Icon(Icons.help_outline),
           label: '不明',
         );
     }
@@ -122,8 +111,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final preferenceController = context.watch<PreferenceController>();
 
-    if (preferenceController.isLoading &&
-        preferenceController.preference == null) {
+    if (preferenceController.isLoading && preferenceController.preference == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
@@ -141,13 +129,7 @@ class _HomePageState extends State<HomePage> {
             _selectedIndex = index;
           });
         },
-        destinations: tabs.map((tab) {
-          final item = _buildNavItem(tab);
-          return NavigationDestination(
-            icon: item.icon,
-            label: item.label ?? '',
-          );
-        }).toList(),
+        destinations: tabs.map(_buildDestination).toList(),
       ),
     );
   }

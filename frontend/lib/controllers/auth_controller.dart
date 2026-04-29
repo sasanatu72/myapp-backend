@@ -75,33 +75,22 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[login] /auth/login start');
-
       final authResponse = await authService.login(
         email: email,
         password: password,
       );
 
-      debugPrint('[login] /auth/login success');
-
       _token = authResponse.accessToken;
       apiClient.setToken(_token);
 
-      debugPrint('[login] save token start');
       await tokenStorageService.saveToken(_token!);
-      debugPrint('[login] save token success');
 
-      debugPrint('[login] /users/me start');
       final me = await authService.getMe();
-      debugPrint('[login] /users/me success');
-
       _currentUser = me;
       _isLoggedIn = true;
 
       return true;
     } catch (e) {
-      debugPrint('[login] error: $e');
-
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
       _isLoggedIn = false;
       _currentUser = null;

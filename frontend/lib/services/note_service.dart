@@ -21,7 +21,7 @@ class NoteService {
     return data.map((e) => Note.fromJson(e)).toList();
   }
 
-  Future<void> createNote({
+  Future<Note> createNote({
     required String title,
     required String content,
   }) async {
@@ -36,9 +36,11 @@ class NoteService {
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(_extractErrorMessage(response.body, 'Note作成に失敗しました'));
     }
+
+    return Note.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  Future<void> updateNote({
+  Future<Note> updateNote({
     required int id,
     required String title,
     required String content,
@@ -54,6 +56,8 @@ class NoteService {
     if (response.statusCode != 200) {
       throw Exception(_extractErrorMessage(response.body, 'Note更新に失敗しました'));
     }
+
+    return Note.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<void> deleteNote(int id) async {

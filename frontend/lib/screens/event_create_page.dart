@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import '../models/event.dart';
 import '../services/event_service.dart';
@@ -11,9 +12,11 @@ class EventCreatePage extends StatefulWidget {
   const EventCreatePage({
     super.key,
     this.event,
+    this.initialDate,
   });
 
   final Event? event;
+  final DateTime? initialDate;
 
   bool get isEdit => event != null;
 
@@ -24,14 +27,15 @@ class EventCreatePage extends StatefulWidget {
 class _EventCreatePageState extends State<EventCreatePage> {
   late final TextEditingController _titleController;
 
-  late DateTime _date;
+  late DateTime _startDate;
+  late DateTime _endDate;
   late DateTime _startTime;
   late DateTime _endTime;
 
   bool _isSaving = false;
 
-  static const double _datePickerHeight = 118;
-  static const double _timePickerHeight = 108;
+  static const int _minuteInterval = 5;
+  static const double _timePickerHeight = 112;
   static const double _pickerItemExtent = 28;
 
   @override
@@ -42,25 +46,26 @@ class _EventCreatePageState extends State<EventCreatePage> {
     _titleController = TextEditingController(text: event?.title ?? '');
 
     if (event != null) {
-      _date = DateTime(
-        event.startTime.year,
-        event.startTime.month,
-        event.startTime.day,
-      );
-      _startTime = event.startTime;
-      _endTime = event.endTime;
+      _startDate = dateOnly(event.startTime);
+      _endDate = dateOnly(event.endTime);
+      _startTime = _alignToMinuteInterval(event.startTime);
+      _endTime = _alignToMinuteInterval(event.endTime);
     } else {
       final now = DateTime.now();
-      _date = DateTime(now.year, now.month, now.day);
+      final roundedStart = _roundUpToMinuteInterval(now);
+      final initialDay = widget.initialDate == null
+          ? dateOnly(roundedStart)
+          : dateOnly(widget.initialDate!);
 
+      _startDate = initialDay;
+      _endDate = initialDay;
       _startTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        now.hour,
-        now.minute,
+        initialDay.year,
+        initialDay.month,
+        initialDay.day,
+        roundedStart.hour,
+        roundedStart.minute,
       );
-
       _endTime = _startTime.add(const Duration(hours: 1));
     }
   }
@@ -69,6 +74,39 @@ class _EventCreatePageState extends State<EventCreatePage> {
   void dispose() {
     _titleController.dispose();
     super.dispose();
+  }
+
+  DateTime _roundUpToMinuteInterval(DateTime value) {
+    final minute = value.minute;
+    final remainder = minute % _minuteInterval;
+    final additionalMinutes = remainder == 0 ? 0 : _minuteInterval - remainder;
+
+    final rounded = DateTime(
+      value.year,
+      value.month,
+      value.day,
+      value.hour,
+      value.minute,
+    ).add(Duration(minutes: additionalMinutes));
+
+    return DateTime(
+      rounded.year,
+      rounded.month,
+      rounded.day,
+      rounded.hour,
+      rounded.minute,
+    );
+  }
+
+  DateTime _alignToMinuteInterval(DateTime value) {
+    final roundedMinute = (value.minute ~/ _minuteInterval) * _minuteInterval;
+    return DateTime(
+      value.year,
+      value.month,
+      value.day,
+      value.hour,
+      roundedMinute,
+    );
   }
 
   DateTime _mergeDateAndTime(DateTime date, DateTime time) {
@@ -81,7 +119,17 @@ class _EventCreatePageState extends State<EventCreatePage> {
     );
   }
 
-  bool get _isInvalidTimeRange => !_endTime.isAfter(_startTime);
+  DateTime get _mergedStartTime => _mergeDateAndTime(_startDate, _startTime);
+  DateTime get _mergedEndTime => _mergeDateAndTime(_endDate, _endTime);
+
+  bool get _isInvalidTimeRange => !_mergedEndTime.isAfter(_mergedStartTime);
+
+  String get _dateRangeLabel {
+    if (isSameDate(_startDate, _endDate)) {
+      return formatDate(_startDate);
+    }
+    return '${formatDate(_startDate)} - ${formatDate(_endDate)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,28 +153,9 @@ class _EventCreatePageState extends State<EventCreatePage> {
             ),
             const SizedBox(height: 16),
 
-            _PickerSection(
-              title: '日付',
-              value: formatDate(_date),
-              icon: Icons.calendar_today,
-              child: SizedBox(
-                height: _datePickerHeight,
-                child: CupertinoDatePicker(
-                  mode: CupertinoDatePickerMode.date,
-                  initialDateTime: _date,
-                  minimumDate: DateTime(2020),
-                  maximumDate: DateTime(2100),
-                  itemExtent: _pickerItemExtent,
-                  changeReportingBehavior: ChangeReportingBehavior.onScrollEnd,
-                  onDateTimeChanged: (value) {
-                    setState(() {
-                      _date = DateTime(value.year, value.month, value.day);
-                      _startTime = _mergeDateAndTime(_date, _startTime);
-                      _endTime = _mergeDateAndTime(_date, _endTime);
-                    });
-                  },
-                ),
-              ),
+            _DateRangeCard(
+              value: _dateRangeLabel,
+              onTap: _openDateRangePicker,
             ),
 
             const SizedBox(height: 16),
@@ -141,15 +170,15 @@ class _EventCreatePageState extends State<EventCreatePage> {
                   mode: CupertinoDatePickerMode.time,
                   initialDateTime: _startTime,
                   use24hFormat: true,
-                  minuteInterval: 5,
+                  minuteInterval: _minuteInterval,
                   itemExtent: _pickerItemExtent,
                   changeReportingBehavior: ChangeReportingBehavior.onScrollEnd,
                   onDateTimeChanged: (value) {
                     setState(() {
-                      final newStartTime = _mergeDateAndTime(_date, value);
-                      _startTime = newStartTime;
+                      _startTime = _alignToMinuteInterval(value);
 
-                      if (!_endTime.isAfter(_startTime)) {
+                      if (_isInvalidTimeRange) {
+                        _endDate = _startDate;
                         _endTime = _startTime.add(const Duration(hours: 1));
                       }
                     });
@@ -170,12 +199,12 @@ class _EventCreatePageState extends State<EventCreatePage> {
                   mode: CupertinoDatePickerMode.time,
                   initialDateTime: _endTime,
                   use24hFormat: true,
-                  minuteInterval: 5,
+                  minuteInterval: _minuteInterval,
                   itemExtent: _pickerItemExtent,
                   changeReportingBehavior: ChangeReportingBehavior.onScrollEnd,
                   onDateTimeChanged: (value) {
                     setState(() {
-                      _endTime = _mergeDateAndTime(_date, value);
+                      _endTime = _alignToMinuteInterval(value);
                     });
                   },
                 ),
@@ -185,7 +214,7 @@ class _EventCreatePageState extends State<EventCreatePage> {
             if (_isInvalidTimeRange) ...[
               const SizedBox(height: 12),
               Text(
-                '終了時間は開始時間より後にしてください。',
+                '終了日時は開始日時より後にしてください。',
                 style: TextStyle(
                   color: colorScheme.error,
                   fontWeight: FontWeight.w600,
@@ -212,6 +241,147 @@ class _EventCreatePageState extends State<EventCreatePage> {
     );
   }
 
+  Future<void> _openDateRangePicker() async {
+    final pickedRange = await showModalBottomSheet<_DateRange>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        DateTime? tempStart = _startDate;
+        DateTime? tempEnd = isSameDate(_startDate, _endDate) ? null : _endDate;
+        DateTime focusedDay = _startDate;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final start = tempStart;
+            final end = tempEnd ?? tempStart;
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            start == null
+                                ? '開始日を選択'
+                                : end == null || isSameDate(start, end)
+                                    ? '開始日: ${formatDate(start)}'
+                                    : '${formatDate(start)} - ${formatDate(end)}',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setModalState(() {
+                              tempStart = null;
+                              tempEnd = null;
+                            });
+                          },
+                          child: const Text('リセット'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TableCalendar(
+                      firstDay: DateTime.utc(2020, 1, 1),
+                      lastDay: DateTime.utc(2030, 12, 31),
+                      focusedDay: focusedDay,
+                      rangeStartDay: tempStart,
+                      rangeEndDay: tempEnd,
+                      rangeSelectionMode: RangeSelectionMode.toggledOn,
+                      selectedDayPredicate: (day) =>
+                          tempStart != null && isSameDate(tempStart!, day),
+                      onPageChanged: (focused) {
+                        focusedDay = focused;
+                      },
+                      onDaySelected: (selected, focused) {
+                        setModalState(() {
+                          focusedDay = focused;
+
+                          if (tempStart == null || tempEnd != null) {
+                            tempStart = dateOnly(selected);
+                            tempEnd = null;
+                            return;
+                          }
+
+                          final selectedDate = dateOnly(selected);
+                          final currentStart = tempStart!;
+
+                          if (selectedDate.isBefore(currentStart)) {
+                            tempStart = selectedDate;
+                            tempEnd = currentStart;
+                          } else if (isSameDate(selectedDate, currentStart)) {
+                            tempEnd = null;
+                          } else {
+                            tempEnd = selectedDate;
+                          }
+                        });
+                      },
+                      onRangeSelected: (start, end, focused) {
+                        setModalState(() {
+                          focusedDay = focused;
+                          if (start == null) {
+                            tempStart = null;
+                            tempEnd = null;
+                            return;
+                          }
+
+                          tempStart = dateOnly(start);
+                          tempEnd = end == null ? null : dateOnly(end);
+                        });
+                      },
+                      headerStyle: const HeaderStyle(
+                        formatButtonVisible: false,
+                        titleCentered: true,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: tempStart == null
+                            ? null
+                            : () {
+                                Navigator.pop(
+                                  context,
+                                  _DateRange(
+                                    start: tempStart!,
+                                    end: tempEnd ?? tempStart!,
+                                  ),
+                                );
+                              },
+                        child: const Text('日付を決定'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (pickedRange == null) return;
+
+    setState(() {
+      _startDate = pickedRange.start;
+      _endDate = pickedRange.end;
+
+      if (_endDate.isBefore(_startDate)) {
+        final temp = _startDate;
+        _startDate = _endDate;
+        _endDate = temp;
+      }
+    });
+  }
+
   Future<void> _save() async {
     if (_titleController.text.trim().isEmpty) {
       _showMessage('タイトルを入力してください');
@@ -219,7 +389,7 @@ class _EventCreatePageState extends State<EventCreatePage> {
     }
 
     if (_isInvalidTimeRange) {
-      _showMessage('終了時間は開始時間より後にしてください');
+      _showMessage('終了日時は開始日時より後にしてください');
       return;
     }
 
@@ -234,14 +404,14 @@ class _EventCreatePageState extends State<EventCreatePage> {
         await eventService.updateEvent(
           id: widget.event!.id,
           title: _titleController.text.trim(),
-          startTime: _startTime,
-          endTime: _endTime,
+          startTime: _mergedStartTime,
+          endTime: _mergedEndTime,
         );
       } else {
         await eventService.createEvent(
           title: _titleController.text.trim(),
-          startTime: _startTime,
-          endTime: _endTime,
+          startTime: _mergedStartTime,
+          endTime: _mergedEndTime,
         );
       }
 
@@ -262,6 +432,69 @@ class _EventCreatePageState extends State<EventCreatePage> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+}
+
+class _DateRange {
+  const _DateRange({
+    required this.start,
+    required this.end,
+  });
+
+  final DateTime start;
+  final DateTime end;
+}
+
+class _DateRangeCard extends StatelessWidget {
+  const _DateRangeCard({
+    required this.value,
+    required this.onTap,
+  });
+
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(
+            children: [
+              Icon(Icons.date_range, color: colorScheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '日付',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.keyboard_arrow_up),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -319,7 +552,7 @@ class _PickerSection extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             child,
           ],
         ),
