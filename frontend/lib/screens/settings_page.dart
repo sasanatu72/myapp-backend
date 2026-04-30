@@ -316,7 +316,14 @@ class _SettingsPageState extends State<SettingsPage> {
     if (shouldLogout != true) return;
 
     if (!mounted) return;
-    context.read<PreferenceController>().clear();
-    await context.read<AuthController>().logout();
+
+    final preferenceController = context.read<PreferenceController>();
+    final authController = context.read<AuthController>();
+
+    preferenceController.clear();
+    await authController.logout();
+
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 }

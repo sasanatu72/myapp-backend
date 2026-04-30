@@ -658,7 +658,7 @@ class _CalendarEventBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final text = '${startsBeforeWeek ? '← ' : ''}${event.title}${endsAfterWeek ? ' →' : ''}';
+    final text = event.title;
 
     return DecoratedBox(
       decoration: BoxDecoration(

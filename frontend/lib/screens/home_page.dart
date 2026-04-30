@@ -122,15 +122,17 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       body: _buildPage(tabs[currentIndex]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        destinations: tabs.map(_buildDestination).toList(),
-      ),
+      bottomNavigationBar: tabs.length >= 2
+          ? NavigationBar(
+              selectedIndex: currentIndex,
+              onDestinationSelected: (index) {
+                setState(() {
+                  _selectedIndex = index;
+                });
+              },
+              destinations: tabs.map(_buildDestination).toList(),
+            )
+          : null,
     );
   }
 }

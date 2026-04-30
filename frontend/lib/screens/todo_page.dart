@@ -507,7 +507,6 @@ class _TodoCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
           fontWeight: FontWeight.w700,
-          decoration: todo.isDone ? TextDecoration.lineThrough : null,
           color: todo.isDone ? colorScheme.onSurfaceVariant : colorScheme.onSurface,
         );
 
